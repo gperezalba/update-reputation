@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <link rel="icon" type="image/png" href="https://www.pimarkets.io/favicon.ico"/>
+    <title>PiMarkets® Reputaciones</title>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  </head>
+  <body>
+  <style type='text/css'>
+        body {
+            font-family: 'Open Sans', sans-serif;
+            font-weight: 400;
+            background-color: #072146
+        }
+        
+        h1 {
+            color: white;
+        }
+
+        h2 {
+            color: white;
+        }
+
+        h3 {
+            color: white;
+        }
+
+        h4 {
+            color: white;
+        }
+
+        h5 {
+            color: white;
+        }
+
+        .mySelector {
+            font-family: 'Open Sans', sans-serif;
+            font-weight: 400;
+            width: 150px;
+            font-size: 16px;
+            text-align-last:center;
+        }
+
+        .myCheckbox {
+            font-color: white;
+            background-color: green;
+        }
+
+        label {
+            color:white;
+            font-family: 'Open Sans', sans-serif;
+        }
+
+        .myButton {
+            background-color:#0a93eb;
+            border-radius:6px;
+            cursor:pointer;
+            color:white;
+            font-family:Arial;
+            font-size:15px;
+            font-weight:normal;
+            padding:6px 24px;
+        }
+
+        .center {
+            margin: auto;
+            padding: 10px;
+            text-align: center;
+            justify-content: center;
+            align-items: center;
+        }
+    </style>
+
+    <div class="center">
+        <br>
+        <br>
+        <img src="https://pimarkets.io/assets/img/logo-positive.png" width="250" height="50">
+        <br>
+        <br>
+        <button class="myButton" onclick="enableMetamask();">Conectar Metamask</button>
+        <br>
+        <div style="color: white;" id="selectedMetamask"></div>
+        <br>
+        <h4>Actualizar reputación</h4>
+        <input type="text" class="redondeadonorelieve" style="visibility:visible" id="nickname" placeholder="Nombre de usuario">
+        <button class="myButton" id="printButton" style="visibility:visible" onclick="printReputation();">Cargar usuario</button>
+        <br>
+        <div style="color: white;" id="printInfo"></div>
+        <br>
+        <select class="mySelector" style="visibility:hidden" name="newReputation" id="newReputation">
+            <option value='null'>- Reputación -</option>
+            <option value='0'>0</option>
+            <option value='5'>5</option>
+            <option value='10'>10</option>
+            <option value='15'>15</option>
+            <option value='20'>20</option>
+        </select>
+        <br>
+        <br>
+        <button class="myButton" style="visibility:hidden" id="updateButton" onclick="updateReputation();">Actualizar reputación</button>
+        <br>
+        <br>
+        <div style="color: white;" id="printTx"></div>
+        <br>
+        <button class="myButton" style="visibility:hidden" id="clearButton" onclick="changeToPrintState();">Cargar nuevo usuario</button>
+        <br>
+        <br>
+    </div>
+  </body>
+  <script src="https://cdn.jsdelivr.net/npm/pi-markets@1.0.126/dist/pimarkets.min.js"></script>
+    <script type="text/javascript">
+
+        const CONTRACT_ABI = [{"constant":true,"inputs":[{"name":"","type":"address"}],"name":"offchainReputation","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"name":"_user","type":"address"},{"name":"_reputation","type":"uint256"}],"name":"updateReputation","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"controller","outputs":[{"name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"inputs":[{"name":"_controllerAddress","type":"address"}],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":false,"name":"user","type":"address"},{"indexed":false,"name":"reputation","type":"uint256"}],"name":"UpdateReputation","type":"event"}];
+        const ZERO_ADDRESS = pimarkets.Constants.PI.address;
+        const CONTRACT_ADDRESS = "0x79cd02c64f780ad6105dcd2e6d34a5cab3558ae7";
+        let USER_WALLET = ZERO_ADDRESS;
+
+        const ACCOUNT = "0x";
+
+        async function printReputation() {
+            let nickname = document.getElementById("nickname").value;
+
+            try {
+                document.getElementById("printInfo").innerHTML = "Buscando...";
+                let reputation = await getReputation(nickname);
+                document.getElementById("printInfo").innerHTML = "Nombre de usuario: " + nickname + " <br> " + "Wallet: " + USER_WALLET + " <br> " + "Reputación: " + reputation;
+                changeToModifyState();
+            } catch(e) {
+                document.getElementById("printInfo").innerHTML = "ERROR";
+            }
+        }
+
+        async function getReputation(nickname) {
+            let customQuery = '{ users(where:{name:"' + nickname + '"}) { offchainReputation id } }';
+            
+            let response;
+
+            try {
+                response = await requestGraph(customQuery, 'p2p');
+                USER_WALLET = response.users[0].id; 
+                return response.users[0].offchainReputation;
+            } catch (e) {
+                throw new Error(error);
+            }
+        }
+
+        async function updateReputation() {
+            let newReputation = getNewReputation();
+            if (newReputation != null) {
+
+                let contractService = new pimarkets.Contracts('mainnet');
+                let contract = contractService.getContractCaller(
+                    CONTRACT_ADDRESS,
+                    CONTRACT_ABI
+                );
+
+                let nickname = document.getElementById("nickname").value;
+                await getReputation(nickname);
+
+                if (USER_WALLET != ZERO_ADDRESS) {
+                    let data = contract.interface.functions.updateReputation.encode([USER_WALLET, newReputation]);
+
+                    const transactionParameters = {
+                        nonce: '0x00', // ignored by MetaMask
+                        gasPrice: '0x00', // customizable by user during MetaMask confirmation.
+                        gas: '0x7A120', // customizable by user during MetaMask confirmation.
+                        to: CONTRACT_ADDRESS, // Required except during contract publications.
+                        from: ethereum.selectedAddress, // must match user's active address.
+                        value: '0x00', // Only required to send ether to the recipient from the initiating external account.
+                        data: data,
+                        chainId: '0x7AB8', // Used to prevent transaction reuse across blockchains. Auto-filled by MetaMask.
+                    };
+
+                    // txHash is a hex string
+                    // As with any RPC call, it may throw an error
+                    try {
+                        document.getElementById("printTx").innerHTML = "Enviando...";
+
+                        const txHash = await ethereum.request({
+                            method: 'eth_sendTransaction',
+                            params: [transactionParameters],
+                        });
+
+                        document.getElementById("printTx").innerHTML = "ENVIADA";
+                        changeToPrintState();
+                    } catch (error) {
+                        console.log(error);
+                        document.getElementById("printTx").innerHTML = "ERROR";
+                    }
+                } else {
+                    console.log("USER_WALLET ES 0x0...0")
+                    document.getElementById("printTx").innerHTML = "USUARIO NO CARGADO";
+                }
+            }
+        }
+
+        function changeToModifyState() {
+            let newReputation = document.getElementById("newReputation");
+            newReputation.style.visibility = 'visible';
+
+            let updateButton = document.getElementById("updateButton");
+            updateButton.style.visibility = 'visible';
+
+            let clearButton = document.getElementById("clearButton");
+            clearButton.style.visibility = 'visible';
+
+            let printButton = document.getElementById("printButton");
+            printButton.style.visibility = 'hidden';
+
+            let nickname = document.getElementById("nickname");
+            nickname.style.visibility = 'hidden';
+        }
+
+        function changeToPrintState() {
+            let newReputation = document.getElementById("newReputation");
+            newReputation.style.visibility = 'hidden';
+
+            let updateButton = document.getElementById("updateButton");
+            updateButton.style.visibility = 'hidden';
+            
+            let clearButton = document.getElementById("clearButton");
+            clearButton.style.visibility = 'hidden';
+
+            let printButton = document.getElementById("printButton");
+            printButton.style.visibility = 'visible';
+
+            let nickname = document.getElementById("nickname");
+            nickname.style.visibility = 'visible';
+
+            document.getElementById("printInfo").innerHTML = "";
+            document.getElementById("printTx").innerHTML = "";
+        }
+
+        async function requestGraph(customQuery, subgraph) {
+            let queryService = new pimarkets.Query(subgraph, 'mainnet');
+            queryService.setCustomQuery(customQuery);
+
+            try {
+                let response = await queryService.request();
+                if (response != undefined) return response;
+            } catch(error) {
+                throw new Error(error);
+            }
+        }
+
+        function getNewReputation() {
+            let selectorElement = document.getElementById("newReputation");
+		    let newReputation = selectorElement.options[selectorElement.selectedIndex].value;
+
+            if (newReputation != 'null') {
+                return newReputation;
+            } else {
+                alert("No ha seleccionado la nueva reputación")
+                return null;
+            }
+        }
+
+        firstInit();
+        function firstInit() {
+            if (ethereum.selectedAddress != null) {
+                document.getElementById("selectedMetamask").innerHTML = "Metamask: " + ethereum.selectedAddress;
+            } else {
+                document.getElementById("selectedMetamask").innerHTML = "Metamask: NO CONECTADO";
+            }
+        }
+
+        async function enableMetamask() {
+            
+            if (typeof window.ethereum !== 'undefined') {
+                console.log('MetaMask is installed!');
+                const accounts = await ethereum.request({ method: 'eth_requestAccounts' });
+                const ACCOUNT = accounts[0];
+                document.getElementById("selectedMetamask").innerHTML = "Metamask: " + ethereum.selectedAddress;
+            } else {
+                alert("Instalar Metamask")
+            }
+            
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+    </script>
+</html>
